@@ -1,0 +1,97 @@
+name: shopsphere
+
+# Usage:
+#   cp .env.example .env        # then set the JWT secrets (and any payment/SMTP keys)
+#   docker compose up --build
+#   docker compose exec backend npm run seed -- --force   # optional demo data
+# Store: http://localhost:8080   API health: http://localhost:8080/api/health
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/ecommerce
+      REDIS_URL: redis://redis:6379
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:8080}
+      SERVER_URL: ${SERVER_URL:-http://localhost:8080}
+      TRUST_PROXY: 1
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      # Secrets are required; compose stops with a clear message if they are missing.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env (see .env.example)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env (see .env.example)}
+      JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-15m}
+      JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
+      CURRENCY: ${CURRENCY:-INR}
+      PAYMENT_PROVIDERS: ${PAYMENT_PROVIDERS:-cod,razorpay,stripe}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-ShopSphere <no-reply@shopsphere.local>}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-LOCAL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME:-}
+      AWS_PUBLIC_URL: ${AWS_PUBLIC_URL:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    volumes:
+      - uploads:/app/src/uploads
+    expose:
+      - "5000"
+
+  frontend:
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: /api
+        VITE_SITE_URL: ${CLIENT_URL:-http://localhost:8080}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  mongo-data:
+  redis-data:
+  uploads:

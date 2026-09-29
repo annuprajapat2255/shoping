@@ -1,0 +1,4 @@
+# Keep LF endings so Dockerfiles, nginx config and scripts work inside Linux containers.
+* text=auto eol=lf
+*.png binary
+*.webp binary
